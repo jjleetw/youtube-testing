@@ -30,12 +30,13 @@ def get_transcript():
         if not video_id:
             return jsonify({'error': 'Invalid YouTube URL'}), 400
         
-        transcript = YouTubeTranscriptApi.get_transcripts([video_id])[video_id]
+        # Correct way to call the API
+        transcript_list = YouTubeTranscriptApi.get_transcript(video_id)
         
         return jsonify({
             'success': True,
             'video_id': video_id,
-            'transcript': transcript
+            'transcript': transcript_list
         })
     except Exception as e:
         return jsonify({'error': str(e)}), 500
