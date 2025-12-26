@@ -1,26 +1,27 @@
 from flask import Flask, request, jsonify
 import re
-import traceback
-# 核心修正：只導入最外層模組，徹底避開名稱衝突
-import youtube_transcript_api
+from youtube_transcript_api import YouTubeTranscriptApi
+from youtube_transcript_api._errors import TranscriptsDisabled, NoTranscriptFound
 
 app = Flask(__name__)
 
 def extract_video_id(url):
     """提取 YouTube 影片 ID"""
-    if not url: return None
+    if not url: 
+        return None
     patterns = [r'(?:v=|be/|embed/|shorts/)([^&\n?#]+)']
     for p in patterns:
         m = re.search(p, url)
-        if m: return m.group(1)
+        if m: 
+            return m.group(1)
     return url if len(url) == 11 else None
 
 @app.route('/', methods=['GET'])
 def home():
-    """首頁驗證：看到此訊息代表路由已正確更新"""
+    """首頁驗證"""
     return jsonify({
         'status': 'Online',
-        'message': 'API 已採用全路徑防禦模式運行 (v2.1)',
+        'message': 'YouTube Transcript API 已正確運行',
         'mode': 'Original Language'
     })
 
@@ -38,23 +39,22 @@ def get_transcript():
 
         transcript_list = None
         
-        # --- 核心修正：全路徑調用路徑 ---
-        # 格式：模組名.類別名.方法名
         try:
-            # 優先嘗試：直接抓取影片原語系字幕
-            transcript_list = youtube_transcript_api.YouTubeTranscriptApi.get_transcript(video_id)
-        except Exception as e1:
-            # 備援策略：如果基礎方法失敗，嘗試獲取字幕清單並抓取第一個
-            try:
-                # 再次確認使用的是全路徑調用
-                proxy = youtube_transcript_api.YouTubeTranscriptApi.list_transcripts(video_id)
-                transcript_list = next(iter(proxy)).fetch()
-            except Exception as e2:
-                return jsonify({
-                    'success': False, 
-                    'error': f'影片確實無字幕軌道: {str(e2)}',
-                    'video_id': video_id
-                }), 200
+            # 直接抓取影片原語系字幕
+            transcript_list = YouTubeTranscriptApi.get_transcript(video_id)
+        except (TranscriptsDisabled, NoTranscriptFound) as e:
+            # 如果沒有原語言字幕，返回錯誤
+            return jsonify({
+                'success': False, 
+                'error': f'影片確實無字幕軌道: {str(e)}',
+                'video_id': video_id
+            }), 200
+        except Exception as e:
+            return jsonify({
+                'success': False, 
+                'error': f'無法獲取字幕: {str(e)}',
+                'video_id': video_id
+            }), 200
 
         # 將字幕片段串接為長文字
         full_text = " ".join([t['text'] for t in transcript_list])
@@ -62,17 +62,15 @@ def get_transcript():
         return jsonify({
             'success': True,
             'video_id': video_id,
-            'transcript_text': full_text
-        })
+            'transcript': full_text,
+            'count': len(transcript_list)
+        }), 200
 
     except Exception as e:
-        # 將技術報錯包裝在 JSON 中，不再回傳 404
-        return jsonify({'success': False, 'error': f'系統全域異常: {str(e)}'}), 200
-
-@app.route('/health', methods=['GET'])
-def health():
-    return jsonify({'status': 'ok'})
+        return jsonify({
+            'success': False, 
+            'error': f'伺服器錯誤: {str(e)}'
+        }), 200
 
 if __name__ == '__main__':
-    # Zeabur 建議使用 8080 Port
-    app.run(host='0.0.0.0', port=8080)
+    app.run(host='0.0.0.0', port=8080, debug=False)
