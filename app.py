@@ -37,16 +37,16 @@ def get_transcript():
         if not video_id:
             return jsonify({'success': False, 'error': '無效的影片連結'}), 200
 
-        transcript_list = None
-        
         try:
-            # 直接抓取影片原語系字幕
-            transcript_list = YouTubeTranscriptApi.get_transcript(video_id)
+            # 正確的用法：YouTubeTranscriptApi().fetch()
+            # 預設語言為英文，如果沒有英文字幕會自動嘗試其他語言
+            api = YouTubeTranscriptApi()
+            transcript_list = api.fetch(video_id, languages=['en', 'zh-TW', 'zh-CN', 'ja', 'ko'])
+            
         except (TranscriptsDisabled, NoTranscriptFound) as e:
-            # 如果沒有原語言字幕，返回錯誤
             return jsonify({
                 'success': False, 
-                'error': f'影片確實無字幕軌道: {str(e)}',
+                'error': f'影片確實無字幕軌道',
                 'video_id': video_id
             }), 200
         except Exception as e:
