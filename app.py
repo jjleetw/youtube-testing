@@ -1,7 +1,7 @@
 from flask import Flask, request, jsonify
 import re
 import traceback
-# 修改導入方式，避免名稱衝突
+# 導入整個模組以確保路徑完整
 import youtube_transcript_api
 from youtube_transcript_api import YouTubeTranscriptApi
 
@@ -20,13 +20,6 @@ def extract_video_id(url):
         return url
     return None
 
-@app.route('/', methods=['GET'])
-def home():
-    return jsonify({
-        'status': 'running',
-        'service': 'YouTube Transcript API (Original Language Mode)'
-    })
-
 @app.route('/transcript', methods=['POST'])
 def get_transcript():
     try:
@@ -41,16 +34,16 @@ def get_transcript():
         transcript_list = None
         
         try:
-            # 使用正確的類別方法獲取字幕清單
-            transcript_metadata = YouTubeTranscriptApi.list_transcripts(video_id)
+            # 核心修正：使用完整的類別路徑調用 list_transcripts
+            # 這能避開 "has no attribute" 的錯誤
+            transcript_list_object = youtube_transcript_api.YouTubeTranscriptApi.list_transcripts(video_id)
             
-            # 優先嘗試抓取「非自動生成」的原始字幕 (Manual)
+            # 優先抓取原頻道手動上傳的字幕
             try:
-                transcript_list = transcript_metadata.find_manually_created_transcript().fetch()
+                transcript_list = transcript_list_object.find_manually_created_transcript().fetch()
             except:
-                # 如果沒有手動字幕，則抓取該影片預設的第一個字幕 (包含自動生成)
-                # 這會反映原頻道的預設語言設定
-                transcript_list = next(iter(transcript_metadata)).fetch()
+                # 若無手動字幕，則抓取第一個可用的（通常是原語系的自動生成字幕）
+                transcript_list = next(iter(transcript_list_object)).fetch()
 
         except Exception as e:
             return jsonify({
@@ -59,7 +52,7 @@ def get_transcript():
                 'video_id': video_id
             }), 404
         
-        # 串接為純文字供 n8n 直接寫入 Google Docs
+        # 串接為純文字，方便 n8n 直接寫入 Google Docs
         full_text = " ".join([t['text'] for t in transcript_list])
         
         return jsonify({
@@ -77,5 +70,5 @@ def health():
     return jsonify({'status': 'ok'})
 
 if __name__ == '__main__':
-    # Zeabur 部署建議使用 8080 端口
+    # Zeabur 部署預設使用 8080 端口
     app.run(host='0.0.0.0', port=8080, debug=False)
